@@ -1,12 +1,12 @@
 #pragma once
 #include <stdarg.h>
-#include <Windows.h>
-#include <d3d9.h>
+#include <windows.h>
+#include <d3d11.h>
 #include <shellapi.h>
 #include "resource.h"
 
-#define APP_ID  "KeepNvGpuAwake_d3d9"
-#define APP_TITLE  APP_ID
+#define APP_ID  "KeepSecondGpuAwake_d3d9"
+#define APP_TITLE  "KeepSecondGpuAwake"
 #define CAT__(a,b)  a ## b
 #define CAT(a,b)  CAT__(a,b)
 #define SAFEFREE(p,fn)  if (p) { (fn)(p); (p) = 0; }
@@ -31,6 +31,7 @@ extern HWND const * const x_p_hMainWnd;
 typedef struct AppCfg {
 	UINT wake_interval; // in millisecond
 #define APPCFGDEF_WAKE_INTERVAL  (500)
+	char gpu_filter[256];
 } AppCfg;
 
 extern AppCfg const * const x_p_appCfg;
@@ -72,4 +73,5 @@ void PrnNowOut(PCSTR pszFmt, ...);
 void PrnErr(char const *pszFmt, ...);
 void PrnOut(char const *pszFmt, ...);
 
-IDirect3D9 *Dywa_Direct3DCreate9(UINT sdkVer);
+int IsWindows11OrGreater(void);
+int ResolveAdapterIndex(void);

@@ -2,7 +2,7 @@
 #include "D3DWnd.h"
 #include "chunkchunk.h"
 
-EXTERN_C __declspec(dllexport) DWORD NvOptimusEnablement = 1;
+
 #ifdef UNICODE
 #define H__(a,b)  WCHAR a[sizeof(b)];
 #include "szlitera.h"
@@ -22,8 +22,10 @@ static HWND s_hMainWnd;
 HWND const * const x_p_hMainWnd = &s_hMainWnd;
 static AppCfg s_appCfg;
 AppCfg const *const x_p_appCfg = &s_appCfg;
-static HMODULE s_h_d3d9;
-static FARPROC s_pfn_Direct3DCreate9;
+static IDXGIFactory *s_pDxgiFactory;
+static IDXGIAdapter *s_pAdapters[32];
+static UINT s_cAdapters;
+static WCHAR s_gpuFilterW[256];
 
 static PCSTR s_AppWinErrProc;
 static DWORD s_AppWinErrCode;

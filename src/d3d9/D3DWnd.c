@@ -39,17 +39,20 @@ eof:
 	return ok;
 }
 
-BOOL Start_D3DWnd(HWND hWnd)
+BOOL Start_D3DWnd(HWND hWnd, IDXGIAdapter *pAdapter)
 {
 	MySelf *pSelf = D3DWnd_GetSelf(hWnd);
+	pSelf->pAdapter = pAdapter;
 	D3DWnd_AddNotiIcon(pSelf);
 	return D3DWnd_Step(pSelf);
 }
 
 static void D3DWnd_DelSelf(MySelf *pSelf)
 {
-	SAFERELEASE(pSelf->pDevice);
-	SAFERELEASE(pSelf->pD3D);
+	SAFERELEASE(pSelf->pUav);
+	SAFERELEASE(pSelf->pTex);
+	SAFERELEASE(pSelf->pCtx);
+	SAFERELEASE(pSelf->pDev);
 	pSelf->hWnd = NULL;
 	MemFree(pSelf);
 }
@@ -100,48 +103,60 @@ static void D3DWnd_DelNotiIcon(MySelf *pSelf)
 	Shell_NotifyIcon(NIM_DELETE, (NOTIFYICONDATA*)p);
 }
 
-static BOOL D3DWnd_CreateD3D(MySelf *pSelf)
+#ifndef D3D11_ERROR_DEVICE_REMOVED
+#define D3D11_ERROR_DEVICE_REMOVED 0x88760862
+#endif
+
+static BOOL D3DWnd_CreateD3D11(MySelf *pSelf)
 {
 	BOOL ok = FALSE;
 	HRESULT hr = 0;
-	D3DADAPTER_IDENTIFIER9 id;
-	PrnNowOut("Direct3DCreate9...\n");
-	pSelf->pD3D = Direct3DCreate9(D3D_SDK_VERSION);
-	if (!pSelf->pD3D) {
-		PrnNowExoticErr("Direct3DCreate9 returned NULL");
-		goto eof;
+	PrnNowOut("D3D11CreateDevice...\n");
+	{
+		/* D3D11: non-NULL pAdapter requires D3D_DRIVER_TYPE_UNKNOWN;
+		 * NULL pAdapter (default adapter) requires D3D_DRIVER_TYPE_HARDWARE */
+		D3D_DRIVER_TYPE drvType = pSelf->pAdapter ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE;
+hr = D3D11CreateDevice(pSelf->pAdapter, drvType, NULL,
+		0, NULL, 0,
+		D3D11_SDK_VERSION, &pSelf->pDev, &pSelf->featLevel, &pSelf->pCtx);
 	}
-	PrnNowOut("GetAdapterIdentifier...\n");
-	hr = pSelf->pD3D->lpVtbl->GetAdapterIdentifier(pSelf->pD3D,
-		D3DADAPTER_DEFAULT, 0, &id);
 	if (FAILED(hr)) {
-		AppWinErrSetHR("IDirect3D9::GetAdapterIdentifier", hr);
+		AppWinErrSetHR("D3D11CreateDevice", hr);
 		PrnNowExoticErr(NULL);
 		goto eof;
 	}
-	PrnOut("|- Description: %s\n", id.Description);
-	if (memcmp(id.Description, "NVIDIA", 6) != 0) {
-		PrnOut(" |- Error: I want NVIDIA only!\n");
-		goto eof;
-	}
-	ZeroMemory(&pSelf->d3dpp, sizeof(pSelf->d3dpp));
-	pSelf->d3dpp.Windowed = TRUE;
-	pSelf->d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
-	PrnNowOut("CreateDevice...\n");
-	hr = pSelf->pD3D->lpVtbl->CreateDevice(pSelf->pD3D,
-		D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, pSelf->hWnd,
-		D3DCREATE_SOFTWARE_VERTEXPROCESSING,
-		&pSelf->d3dpp, &pSelf->pDevice);
-	if (FAILED(hr)) {
-		AppWinErrSetHR("IDirect3D9::CreateDevice", hr);
-		PrnNowExoticErr(NULL);
-		goto eof;
+	PrnOut("|- Feature level 0x%04X\n", pSelf->featLevel);
+	{
+		D3D11_TEXTURE2D_DESC td;
+		ZeroMemory(&td, sizeof(td));
+		td.Width = 1;
+		td.Height = 1;
+		td.MipLevels = 1;
+		td.ArraySize = 1;
+		td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		td.SampleDesc.Count = 1;
+		td.Usage = D3D11_USAGE_DEFAULT;
+		td.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+		hr = pSelf->pDev->lpVtbl->CreateTexture2D(pSelf->pDev, &td, NULL, &pSelf->pTex);
+		if (FAILED(hr)) {
+			AppWinErrSetHR("ID3D11Device::CreateTexture2D", hr);
+			PrnNowExoticErr(NULL);
+			goto eof;
+		}
+		hr = pSelf->pDev->lpVtbl->CreateUnorderedAccessView(pSelf->pDev, (ID3D11Resource *)pSelf->pTex, NULL, &pSelf->pUav);
+		if (FAILED(hr)) {
+			AppWinErrSetHR("ID3D11Device::CreateUnorderedAccessView", hr);
+			PrnNowExoticErr(NULL);
+			goto eof;
+		}
 	}
 	ok = TRUE;
 eof:
 	if (!ok) {
-		SAFERELEASE(pSelf->pDevice);
-		SAFERELEASE(pSelf->pD3D);
+		SAFERELEASE(pSelf->pUav);
+		SAFERELEASE(pSelf->pTex);
+		SAFERELEASE(pSelf->pCtx);
+		SAFERELEASE(pSelf->pDev);
 	}
 	return ok;
 }
@@ -151,35 +166,37 @@ static BOOL D3DWnd_Step(MySelf *pSelf)
 	BOOL ok = FALSE;
 	HRESULT d3derr = 0;
 	AppWinErrReset();
-	if (!pSelf->pDevice) {
-		ok = D3DWnd_CreateD3D(pSelf) && pSelf->pDevice;
+	if (!pSelf->pDev) {
+		ok = D3DWnd_CreateD3D11(pSelf) && pSelf->pDev;
 		if (!ok) {
 			SetTimer(pSelf->hWnd, TimerID_Step, StepDelay_CreateD3D, NULL);
 			goto eof;
 		}
-		SetTimer(pSelf->hWnd, TimerID_Step, StepDelay_ResetPresent, NULL);
+		SetTimer(pSelf->hWnd, TimerID_Step, StepDelay_Tick, NULL);
 	}
-	PrnNowOut("Reset... ");
-	d3derr = pSelf->pDevice->lpVtbl->Reset(pSelf->pDevice, &pSelf->d3dpp);
+	PrnNowOut("Tick... ");
+	{
+		FLOAT clr[4] = { 0.f, 1.f, 0.f, 1.f };
+		pSelf->pCtx->lpVtbl->ClearUnorderedAccessViewFloat(pSelf->pCtx, pSelf->pUav, clr);
+	}
+	d3derr = pSelf->pDev->lpVtbl->GetDeviceRemovedReason(pSelf->pDev);
 	if (FAILED(d3derr)) {
 		PrnOut("\n");
 		goto eof;
 	}
-	PrnOut("Present...\n");
-	d3derr = pSelf->pDevice->lpVtbl->Present(pSelf->pDevice, NULL, NULL, NULL, NULL);
-	if (FAILED(d3derr)) {
-		goto eof;
-	}
+	PrnOut("OK\n");
 	ok = TRUE;
 eof:
-	if (d3derr == D3DERR_DEVICELOST) {
-		PrnOut("|- D3DERR_DEVICELOST : Device lost \n");
-		SAFERELEASE(pSelf->pDevice);
-		SAFERELEASE(pSelf->pD3D);
+	if (d3derr == D3D11_ERROR_DEVICE_REMOVED) {
+		PrnOut("|- D3D11_ERROR_DEVICE_REMOVED : Device removed\n");
+		SAFERELEASE(pSelf->pUav);
+		SAFERELEASE(pSelf->pTex);
+		SAFERELEASE(pSelf->pCtx);
+		SAFERELEASE(pSelf->pDev);
 		SetTimer(pSelf->hWnd, TimerID_Step, StepDelay_CreateD3D, NULL);
 	}
 	else if (FAILED(d3derr)) {
-		PrnOut("|- D3DERR HRESULT 0x%08lX \n", d3derr);
+		PrnOut("|- D3D11 HRESULT 0x%08lX\n", (unsigned long)d3derr);
 	}
 	return ok;
 }

@@ -1,13 +1,15 @@
 #include "D3DWnd.h"
 
-#define Direct3DCreate9  Dywa_Direct3DCreate9
 #define MySelf  D3DWnd_Self
 
 typedef struct MySelf {
 	HWND hWnd;
-	IDirect3D9 *pD3D;
-	IDirect3DDevice9 *pDevice;
-	D3DPRESENT_PARAMETERS d3dpp;
+	IDXGIAdapter *pAdapter;
+	ID3D11Device *pDev;
+	ID3D11DeviceContext *pCtx;
+	ID3D11Texture2D *pTex;
+	ID3D11UnorderedAccessView *pUav;
+	D3D_FEATURE_LEVEL featLevel;
 	NotifyIconDataV1 notifyIconData;
 } MySelf;
 
@@ -17,7 +19,7 @@ enum { NotiIconMsg = 101 };
 
 enum { TimerID_Step = 100 };
 enum { StepDelay_CreateD3D = 1000 };
-#define StepDelay_ResetPresent  (APP_Cfg.wake_interval)
+#define StepDelay_Tick  (APP_Cfg.wake_interval)
 
 static void D3DWnd_DelSelf(MySelf *pSelf);
 static BOOL D3DWnd_NewSelf(MySelf **ppSelf, HWND hWnd);

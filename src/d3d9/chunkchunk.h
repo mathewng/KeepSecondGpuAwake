@@ -1,5 +1,5 @@
 #pragma once
-#include <Windows.h>
+#include <windows.h>
 
 // "szChunk" is always zero-terminated.
 // If chunk is bigger than buffer, it will be truncated.

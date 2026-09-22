@@ -1,4 +1,8 @@
 #include "D3DWnd.hh"
+#include <dxgi1_2.h>
+
+static const GUID IID_IDXGIFactory2__ = {0x50c83a1c, 0xe072, 0x4c48, {0x87,0xb0,0x36,0x30,0xfa,0x36,0xa6,0xd0}};
+static const GUID IID_ID3D11Texture2D__ = {0x6f15aaf2, 0xd208, 0x4e89, {0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c}};
 
 BOOL Create_D3DWnd(HWND *phWnd)
 {
@@ -49,6 +53,8 @@ BOOL Start_D3DWnd(HWND hWnd, IDXGIAdapter *pAdapter)
 
 static void D3DWnd_DelSelf(MySelf *pSelf)
 {
+	SAFERELEASE(pSelf->pRtv);
+	SAFERELEASE(pSelf->pSwapChain);
 	SAFERELEASE(pSelf->pUav);
 	SAFERELEASE(pSelf->pTex);
 	SAFERELEASE(pSelf->pCtx);
@@ -150,9 +156,56 @@ hr = D3D11CreateDevice(pSelf->pAdapter, drvType, NULL,
 			goto eof;
 		}
 	}
+	{
+		IDXGIFactory2 *pFactory = NULL;
+		hr = CreateDXGIFactory1(&IID_IDXGIFactory2__, (void **)&pFactory);
+		if (SUCCEEDED(hr)) {
+			DXGI_SWAP_CHAIN_DESC1 sd;
+			ZeroMemory(&sd, sizeof(sd));
+			sd.Width = 1;
+			sd.Height = 1;
+			sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			sd.Stereo = FALSE;
+			sd.SampleDesc.Count = 1;
+			sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			sd.BufferCount = 2;
+			sd.Scaling = DXGI_SCALING_STRETCH;
+			sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+			sd.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+			sd.Flags = 0;
+			hr = pFactory->lpVtbl->CreateSwapChainForHwnd(pFactory,
+				(IUnknown*)pSelf->pDev,
+				pSelf->hWnd,
+				&sd,
+				NULL,
+				NULL,
+				&pSelf->pSwapChain);
+			pFactory->lpVtbl->Release(pFactory);
+		}
+		if (FAILED(hr)) {
+			AppWinErrSetHR("CreateSwapChainForHwnd", hr);
+			PrnNowExoticErr(NULL);
+			goto eof;
+		}
+		{
+			ID3D11Texture2D *pBackBuffer = NULL;
+			hr = pSelf->pSwapChain->lpVtbl->GetBuffer(pSelf->pSwapChain, 0, &IID_ID3D11Texture2D__, (void**)&pBackBuffer);
+			if (SUCCEEDED(hr)) {
+				hr = pSelf->pDev->lpVtbl->CreateRenderTargetView(pSelf->pDev, (ID3D11Resource*)pBackBuffer, NULL, &pSelf->pRtv);
+				pBackBuffer->lpVtbl->Release(pBackBuffer);
+			}
+			if (FAILED(hr)) {
+				AppWinErrSetHR("CreateRenderTargetView", hr);
+				PrnNowExoticErr(NULL);
+				goto eof;
+			}
+		}
+	}
 	ok = TRUE;
 eof:
 	if (!ok) {
+		SAFERELEASE(pSelf->pRtv);
+		SAFERELEASE(pSelf->pSwapChain);
 		SAFERELEASE(pSelf->pUav);
 		SAFERELEASE(pSelf->pTex);
 		SAFERELEASE(pSelf->pCtx);
@@ -179,6 +232,14 @@ static BOOL D3DWnd_Step(MySelf *pSelf)
 		FLOAT clr[4] = { 0.f, 1.f, 0.f, 1.f };
 		pSelf->pCtx->lpVtbl->ClearUnorderedAccessViewFloat(pSelf->pCtx, pSelf->pUav, clr);
 	}
+	{
+		HRESULT hrPresent = pSelf->pSwapChain->lpVtbl->Present(pSelf->pSwapChain, 0, 0);
+		if (FAILED(hrPresent)) {
+			d3derr = hrPresent;
+			PrnOut("\n");
+			goto eof;
+		}
+	}
 	d3derr = pSelf->pDev->lpVtbl->GetDeviceRemovedReason(pSelf->pDev);
 	if (FAILED(d3derr)) {
 		PrnOut("\n");
@@ -193,9 +254,13 @@ eof:
 		SAFERELEASE(pSelf->pTex);
 		SAFERELEASE(pSelf->pCtx);
 		SAFERELEASE(pSelf->pDev);
+		SAFERELEASE(pSelf->pSwapChain);
+		SAFERELEASE(pSelf->pRtv);
 		SetTimer(pSelf->hWnd, TimerID_Step, StepDelay_CreateD3D, NULL);
 	}
 	else if (FAILED(d3derr)) {
+		SAFERELEASE(pSelf->pSwapChain);
+		SAFERELEASE(pSelf->pRtv);
 		PrnOut("|- D3D11 HRESULT 0x%08lX\n", (unsigned long)d3derr);
 	}
 	return ok;

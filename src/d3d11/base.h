@@ -63,7 +63,7 @@ extern HWND const * const x_p_hMainWnd;
 
 typedef struct AppCfg {
 	UINT wake_interval; // in millisecond
-#define APPCFGDEF_WAKE_INTERVAL  (500)
+#define APPCFGDEF_WAKE_INTERVAL  (10000)
 	char gpu_filter[256];
 } AppCfg;
 

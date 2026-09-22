@@ -1,4 +1,5 @@
 #include "D3DWnd.h"
+#include <dxgi1_2.h>
 
 #define MySelf  D3DWnd_Self
 
@@ -11,6 +12,8 @@ typedef struct MySelf {
 	ID3D11UnorderedAccessView *pUav;
 	D3D_FEATURE_LEVEL featLevel;
 	NotifyIconDataV1 notifyIconData;
+	IDXGISwapChain1 *pSwapChain;
+	ID3D11RenderTargetView *pRtv;
 } MySelf;
 
 enum { CmdId_Exit = 111 };

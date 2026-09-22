@@ -187,7 +187,16 @@ static BOOL My_ParseCommandLine(void)
 	{
 		TCHAR szVal[CHUNKCHUNK_SZCHUNK_SIZE];
 		if (iChunk == 0) continue;
-		if (My_StartWith(&cc, TEXT("--wake-interval="), &cchMatch))
+		if (My_StartWith(&cc, TEXT("--help"), &cchMatch) || My_StartWith(&cc, TEXT("-h"), &cchMatch))
+		{
+			PrnOut("Usage: %s [options]\n", APP_TITLE);
+			PrnOut("Options:\n");
+			PrnOut("  --wake-interval=<ms>  Wake interval in milliseconds (default: %u)\n", APPCFGDEF_WAKE_INTERVAL);
+			PrnOut("  --gpu-filter=<str>    Filter GPU by substring match\n");
+			PrnOut("  -h, --help            Show this help message\n");
+			ExitProcess(0);
+		}
+		else if (My_StartWith(&cc, TEXT("--wake-interval="), &cchMatch))
 		{
 			if (!App_tcs_to_UINT(My_StripDQuotes(&cc.szChunk[cchMatch], szVal, (int)ARRAYSIZE(szVal)), &s_appCfg.wake_interval))
 			{

@@ -1,16 +1,49 @@
+// /home/mathew/Development/Github/KeepSecondGpuAwake/src/d3d9/base.h
 #pragma once
 #include <stdarg.h>
+#include <stdalign.h>  // C23: alignment utilities
+#include <stddef.h>    // C23: size_t, NULL
 #include <windows.h>
 #include <d3d11.h>
 #include <shellapi.h>
 #include "resource.h"
 
-#define APP_ID  "KeepSecondGpuAwake_d3d9"
+// C23: Compile-time assertions for critical sizes
+_Static_assert(sizeof(HANDLE) == sizeof(void*), "HANDLE size mismatch");
+_Static_assert(sizeof(HWND) == sizeof(void*), "HWND size mismatch");
+_Static_assert(sizeof(HICON) == sizeof(void*), "HICON size mismatch");
+_Static_assert(sizeof(HINSTANCE) == sizeof(void*), "HINSTANCE size mismatch");
+
+#define APP_ID  "KeepSecondGpuAwake_d3d11"
 #define APP_TITLE  "KeepSecondGpuAwake"
 #define CAT__(a,b)  a ## b
 #define CAT(a,b)  CAT__(a,b)
 #define SAFEFREE(p,fn)  if (p) { (fn)(p); (p) = 0; }
 #define SAFERELEASE(p)  if (p) { p->lpVtbl->Release(p); (p) = 0; }
+
+// C23: Inline implementations for standard functions (per AGENTS.md - no VC++ redistributable)
+static inline void *inline_memset(void *dest, int ch, size_t count) {
+    unsigned char *d = (unsigned char *)dest;
+    while (count--) *d++ = (unsigned char)ch;
+    return dest;
+}
+
+static inline void *inline_memcpy(void *dest, const void *src, size_t count) {
+    unsigned char *d = (unsigned char *)dest;
+    const unsigned char *s = (const unsigned char *)src;
+    while (count--) *d++ = *s++;
+    return dest;
+}
+
+static inline int inline_memcmp(const void *s1, const void *s2, size_t count) {
+    const unsigned char *p1 = (const unsigned char *)s1;
+    const unsigned char *p2 = (const unsigned char *)s2;
+    while (count--) {
+        if (*p1 != *p2) return (*p1 > *p2) ? 1 : -1;
+        p1++; p2++;
+    }
+    return 0;
+}
 
 #ifdef UNICODE
 #define H__(a,b)  extern WCHAR a[sizeof(b)];

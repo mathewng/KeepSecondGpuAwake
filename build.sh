@@ -12,7 +12,7 @@ CC=x86_64-w64-mingw32-gcc
 WINDRES=x86_64-w64-mingw32-windres
 
 # Paths
-SRCDIR=src/d3d9
+SRCDIR=src/d3d11
 OUT=KeepSecondGpuAwake.exe
 
 # Clean previous build artifacts
